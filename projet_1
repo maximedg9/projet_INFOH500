@@ -1,0 +1,38 @@
+#project_1
+
+from skimage.io import imread,imsave,imshow
+%matplotlib inline
+from matplotlib import pyplot as plt
+import numpy as np
+from skimage.color import rgb2hsv
+
+#parameters
+wm = imread("watermark.png")
+im = imread("etretat.jpg")
+y = 0
+x = 0
+gray = 2
+red = 2
+green = 1
+blue = 2
+
+#add ULB watermak
+def add_wm(im,wm,y,x,gray,red,green,blue):
+
+    for m in range(wm.shape[1]):
+        for n in range(wm.shape[0]):
+            if (wm[n,m]>0):
+                im[im.shape[0]//2 - wm.shape[0]//2 + n +y,im.shape[1]//2 - wm.shape[1]//2+ m + x,:] //= gray
+                im[im.shape[0]//2 - wm.shape[0]//2 + n +y,im.shape[1]//2 - wm.shape[1]//2+ m + x,0] //= red
+                im[im.shape[0]//2 - wm.shape[0]//2 + n +y,im.shape[1]//2 - wm.shape[1]//2+ m + x,1] //= green
+                im[im.shape[0]//2 - wm.shape[0]//2 + n +y,im.shape[1]//2 - wm.shape[1]//2+ m + x,2] //= blue
+    return im
+
+im = add_wm(im,wm,y,x,gray,red,green,blue)
+
+plt.figure(figsize=(12,12))
+plt.imshow(im)
+plt.axis('off')
+plt.title('Image with watermark')
+plt.show()
+imsave('etretat_wm.jpg', im)
