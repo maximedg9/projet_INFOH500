@@ -1,0 +1,196 @@
+#project_3
+
+from skimage.io import imread,imshow
+import matplotlib.pyplot as plt
+
+im = imread('mri_brain.jpg')
+
+plt.figure(figsize = (15,5))
+plt.imshow(im)
+plt.axis('off')
+plt.title('mri_brain')
+plt.show()
+
+#---------------------------------------------------------------------
+# I want to use watershed method to segment my image
+# I convert first my image into grayscale
+# I compute the canny edge detection
+
+
+import skimage.filters.rank as skr
+from skimage.filters.rank import median
+from skimage.morphology import disk
+from skimage.color import rgb2gray
+from skimage.util import img_as_ubyte
+from skimage.feature import canny
+
+
+grad = canny(rgb2gray(img_as_ubyte(im)),sigma =1.)
+
+plt.figure(figsize = (15,5))
+plt.imshow(grad)
+plt.axis('on')
+plt.title('canny edge image')
+plt.show()
+
+#------------------------------------------------------------------------
+
+#I choose manually marker to separate the tumor
+#when I look at axis on the canny edge detection image
+
+import numpy as np
+from skimage.segmentation import mark_boundaries
+from skimage.segmentation import watershed
+
+markers= np.zeros_like(rgb2gray(im))
+
+markers[100,50]= 1 #the tumor
+markers[150,100]= 2 #the rest
+
+ws= watershed(grad, markers)
+
+plt.figure(figsize=(10,10))
+plt.subplot(1,2,1)
+plt.imshow(mark_boundaries(im,ws))
+plt.axis('off')
+plt.title('boundaries of the tumor ')
+plt.subplot(1,2,2)
+plt.imshow(ws)
+plt.axis('off')
+plt.title('Watershed result')
+plt.show()
+#------------------------------------------------------------------------------------
+#I have identified the tumor so I can count the pixels
+
+nbr_pixel_tumor= (ws==1).sum()
+print("Number of pixels: ",nbr_pixel_tumor)
+
+calcul_area_tumor= (0.115**2)*nbr_px_tumor
+print("Area of the tumor (cm^2):",calcul_area_tumor)
+
+#--------------------------------------------------------------------------------------
+#I select here the tumor manually, I want to select the tumor automatically
+#I will use Otsu thresholding
+
+def otsu_threshold(h):
+    p = h*1./h.sum() 
+
+    best_l = 0
+    best_t = 0
+
+    var_within = np.zeros(len(h))
+    var_between = np.zeros(len(h))
+    sep = np.zeros(len(h))
+    for t in range(1,len(h)-1):
+        # Class probabilities
+        w0 = p[:t].sum()
+        w1 = p[t:].sum()
+        # Class means
+        m0 = (np.arange(0,t)*p[:t]).sum()/w0
+        m1 = (np.arange(t,len(h))*p[t:]).sum()/w1
+        # Class variances
+        s0 = (((np.arange(0,t)-m0)**2)*p[:t]).sum()/w0
+        s1 = (((np.arange(t,len(h))-m1)**2)*p[t:]).sum()/w1
+        # Intra-class
+        sw = w0*s0+w1*s1
+        # Inter-class
+        sb = w0*w1*((m1-m0)**2)
+        # Separability
+        l = sb/sw
+        if( l > best_l ):
+            best_l = l
+            best_t = t
+        var_within[t] = sw
+        var_between[t] = sb
+        sep[t] = l
+        
+    return best_t, var_within, var_between, sep
+#--------------------------------------------------------
+#I compute the histogram to use this method.
+#there are lots dark pixels which can disturb otsu threshold
+
+im= (rgb2gray(im)*255).astype('uint8')
+
+h,bins= np.histogram(im,range(257))
+
+plt.figure()
+plt.plot(h)
+plt.show()
+
+#--------------------------------------------------------------
+
+#In order to improve the situation, I apply an auto level correction. 
+def auto_level(im,Tmin,Tmax):
+    lut_autolev = np.arange(256)
+    lut_autolev[lut_autolev>Tmax]= 255
+    lut_autolev[lut_autolev<Tmin]= 0
+    lut_autolev[(lut_autolev<=Tmax)*(lut_autolev>=Tmin)] = 255/(Tmax-Tmin)*(lut_autolev[(lut_autolev<=Tmax)*(lut_autolev>=Tmin)]-Tmin)
+
+    im_autolev = im.copy()
+    im_autolev[:,:] = lut_autolev[im_autolev[:,:]]
+    return im_autolev
+
+im_out = auto_level(im,Tmin=120,Tmax=250 )
+
+plt.figure(figsize = (10,10))
+plt.subplot(1,2,1)
+plt.imshow(im)
+plt.title('before auto level')
+plt.axis('off')
+plt.subplot(1,2,2)
+plt.imshow(im_out)
+plt.title('after auto level')
+plt.axis('off')
+plt.show()
+
+h_autolevel,bins = np.histogram(im_out,range(257))
+plt.figure()
+plt.plot(h_g)
+plt.show()
+
+#------------------------------------------------------------
+#I can now apply the Otsu thresholding
+
+t,var_within, var_between, sep = otsu_threshold(h_autolevel)
+im_threshold = (im_g>t).astype(np.uint8)
+im_threshold_median = skr.median(im_threshold, disk(6))
+print("Otsu threshold : %d"%t)
+
+plt.figure(figsize=(10,5))
+plt.imshow(im_threshold_median)
+plt.axis('off')
+plt.title('Otsu thresholding')
+plt.show()
+
+#--------------------------------------------------------------------------------------
+#the tumor is segmented
+#I will see if I have the same area than manually
+
+from skimage.measure import label, regionprops
+lab = label(im_threshold_median)
+    
+plt.figure(figsize=(10,5))
+plt.imshow(lab)
+plt.axis('off')
+plt.title('Objects')
+plt.show()
+
+objects = regionprops(lab)
+
+plt.figure()
+plt.gray()
+plt.imshow(im_threshold_median)
+
+for obj in objects:
+    if( obj.area < 100 ): continue 
+    plt.plot(obj.centroid[1], obj.centroid[0], 'ro')
+    nbr_pixel = obj.area
+
+plt.axis('off')
+plt.title('Tumor selection')
+plt.show()
+
+print("Number of pixels:", nbr_pixel)
+print("Tumor area (cm^2):", (0.115**2)*nbr_pixel)
+
+#I have a similar area as manually
