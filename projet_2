@@ -1,0 +1,169 @@
+#project_2
+
+from skimage.io import imread,imshow,imsave
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib import cm
+
+im = imread('etretat.jpg')
+#---------------------------------------------------------------------------------
+#I apply a median filter to reduce noise
+#the surface of the disk is proportionnal to the blur of the image
+
+from skimage.filters.rank import median
+from skimage.morphology import disk
+
+def median_filter(im):
+    im_m= im.copy()
+    for i in range(3):
+        im_m[:,:,i]= median(im_m[:,:,i],disk(3))
+    return im_m 
+
+im_out = median_filter(im)
+
+plt.figure(figsize=(15,15))
+plt.subplot(1,2,1)
+plt.imshow(im)
+plt.title('before Noise reduction')
+plt.axis('off')
+plt.subplot(1,2,2)
+plt.imshow(im_out)
+plt.title('after Noise reduction')
+plt.axis('off')
+plt.show()
+#----------------------------------------------------------------------------------
+# I create a filter in order to stretch the histogram : autolevel
+# I stretch the histogram for each color chanel
+# I obtain an image with with stronger colors and more contrast. "
+
+
+def auto_level(im,Tmin,Tmax):
+    lut_autolev = np.arange(256)
+    lut_autolev[lut_autolev>Tmax]= 255
+    lut_autolev[lut_autolev<Tmin]= 0
+    lut_autolev[(lut_autolev<=Tmax)*(lut_autolev>=Tmin)] = 255/(Tmax-Tmin)*(lut_autolev[(lut_autolev<=Tmax)*(lut_autolev>=Tmin)]-Tmin)
+
+    im_autolev = im.copy()
+    for i in range(3):
+        im_autolev[:,:,i] = lut_autolev[im_autolev[:,:,i]]
+    return im_autolev
+
+im_out = auto_level(im,Tmin=60,Tmax=250 )
+
+plt.figure(figsize = (15,15))
+plt.subplot(1,2,1)
+plt.imshow(im)
+plt.title('before auto level')
+plt.axis('off')
+plt.subplot(1,2,2)
+plt.imshow(im_out)
+plt.title('after auto level')
+plt.axis('off')
+plt.show()
+
+#---------------------------------------------------------------------------
+# with an equaliszation, the histogram distribution can be more equal
+# I use the cumulated histograms of the 3 different channels (RGB). "
+
+def cum_hist(hist):
+    c=0
+    c_hist = np.zeros((256,))
+    for j in range(256):
+        c += hist[j]
+        c_hist[j] = c
+    return c_hist
+
+def equalization(im):
+    r = im[:,:,0]
+    g = im[:,:,1]
+    b = im[:,:,2]
+
+    hist_r,bins_r = np.histogram(r.flatten(),range(257))
+    hist_g,bins_g = np.histogram(g.flatten(),range(257))
+    hist_b,bins_b = np.histogram(b.flatten(),range(257))
+
+    c_hist_r = cum_hist(hist_r)
+    c_hist_g = cum_hist(hist_g)
+    c_hist_b = cum_hist(hist_b)
+    lut_r = (255*c_hist_r/c_hist_r.max()).astype('int')
+    lut_g = (255*c_hist_g/c_hist_g.max()).astype('int')
+    lut_b = (255*c_hist_b/c_hist_b.max()).astype('int')
+
+    im_eq = im.copy()
+
+    im_eq[:,:,0] = lut_r[r]
+    im_eq[:,:,1] = lut_g[g]
+    im_eq[:,:,2] = lut_b[b]
+    return im_eq
+
+im_out = equalization(im)
+
+plt.figure(figsize = (15,15))
+plt.subplot(1,2,1)
+plt.imshow(im)
+plt.title('before Equalization')
+plt.axis('off')
+plt.subplot(1,2,2)
+plt.imshow(im_out)
+plt.title('after Equalization')
+plt.axis('off')
+plt.show()
+
+#------------------------------------------------------------------------
+#I work on saturation with HSV image
+#I multiply by coeff s
+#s>1, the saturation increases 
+#s<1, the saturation decreases 
+#There are values of saturation that exceed 1, I put them at 0.99."
+
+from skimage.color import rgb2hsv, hsv2rgb
+
+def saturation(im,s,channel):
+    hsv = rgb2hsv(im)
+    hsv[:,:,channel]*= s
+    for i in range(hsv.shape[0]):
+        for j in range(hsv.shape[1]):
+            if hsv[i,j,channel] >1:
+                hsv[i,j,channel] = 0.99
+    im_s = (hsv2rgb(hsv)*255).astype(np.uint8)
+    return im_s
+
+im_out = saturation(im,2.5,1)
+
+plt.figure(figsize = (15,15))
+plt.subplot(1,2,1)
+plt.imshow(im)
+plt.title('before saturation')
+plt.axis('off')
+plt.subplot(1,2,2)
+plt.imshow(im_out)
+plt.title('after saturation')
+plt.axis('off')
+plt.show()
+
+#-----------------------------------------------------------------------------------------
+#I use all these filters to enhance the image
+
+      
+im_out= im.copy()
+im_out= median_filter(im_out)
+im_out= equalization(im_out)
+im_out= auto_level(im_out,10,252)
+im_out= saturation(im_out,0.7,1)
+im_out= saturation(im_out,1.5,2)
+
+
+imsave('Image_enhancement.jpg',im_out)
+
+plt.figure(figsize=(15,15)) 
+plt.subplot(1,2,1)
+plt.imshow(im)
+plt.title('before enhancement')
+plt.axis('off')
+plt.subplot(1,2,2)
+plt.imshow(im_out)
+plt.title('after enhancement')
+plt.axis('off')
+plt.show()
+
+
